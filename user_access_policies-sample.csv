@@ -1,0 +1,90 @@
+PolicyType,PolicyName,PolicyArn,PolicyDocument
+Managed ,AWSLambdaENIManagementAccess,arn:aws:iam::aws:policy/service-role/AWSLambdaENIManagementAccess,"{
+  ""Version"": ""2012-10-17"",
+  ""Statement"": [
+    {
+      ""Effect"": ""Allow"",
+      ""Action"": [
+        ""ec2:CreateNetworkInterface"",
+        ""ec2:DescribeNetworkInterfaces"",
+        ""ec2:DeleteNetworkInterface"",
+        ""ec2:AssignPrivateIpAddresses"",
+        ""ec2:UnassignPrivateIpAddresses""
+      ],
+      ""Resource"": ""*""
+    }
+  ]
+}"
+Managed ,AmazonEC2FullAccess,arn:aws:iam::aws:policy/AmazonEC2FullAccess,"{
+  ""Version"": ""2012-10-17"",
+  ""Statement"": [
+    {
+      ""Action"": ""ec2:*"",
+      ""Effect"": ""Allow"",
+      ""Resource"": ""*""
+    },
+    {
+      ""Effect"": ""Allow"",
+      ""Action"": ""elasticloadbalancing:*"",
+      ""Resource"": ""*""
+    },
+    {
+      ""Effect"": ""Allow"",
+      ""Action"": ""cloudwatch:*"",
+      ""Resource"": ""*""
+    },
+    {
+      ""Effect"": ""Allow"",
+      ""Action"": ""autoscaling:*"",
+      ""Resource"": ""*""
+    },
+    {
+      ""Effect"": ""Allow"",
+      ""Action"": ""iam:CreateServiceLinkedRole"",
+      ""Resource"": ""*"",
+      ""Condition"": {
+        ""StringEquals"": {
+          ""iam:AWSServiceName"": [
+            ""autoscaling.amazonaws.com"",
+            ""ec2scheduled.amazonaws.com"",
+            ""elasticloadbalancing.amazonaws.com"",
+            ""spot.amazonaws.com"",
+            ""spotfleet.amazonaws.com"",
+            ""transitgateway.amazonaws.com""
+          ]
+        }
+      }
+    }
+  ]
+}"
+Managed ,IAMUserChangePassword,arn:aws:iam::aws:policy/IAMUserChangePassword,"{
+  ""Version"": ""2012-10-17"",
+  ""Statement"": [
+    {
+      ""Effect"": ""Allow"",
+      ""Action"": [
+        ""iam:ChangePassword""
+      ],
+      ""Resource"": [
+        ""arn:aws:iam::*:user/${aws:username}""
+      ]
+    },
+    {
+      ""Effect"": ""Allow"",
+      ""Action"": [
+        ""iam:GetAccountPasswordPolicy""
+      ],
+      ""Resource"": ""*""
+    }
+  ]
+}"
+Group,AdministratorAccess,arn:aws:iam::aws:policy/AdministratorAccess,"{
+  ""Version"": ""2012-10-17"",
+  ""Statement"": [
+    {
+      ""Effect"": ""Allow"",
+      ""Action"": ""*"",
+      ""Resource"": ""*""
+    }
+  ]
+}"
