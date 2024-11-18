@@ -2,20 +2,25 @@ pipeline {
     agent any
 
     parameters {
-        string(name: 'HPA_FILE', defaultValue: 'hpa.yaml', description: 'Path to the HPA YAML file')
         choice(name: 'SCALING_LEVEL', choices: ['low', 'medium', 'high'], description: 'Scaling level for all apps')
     }
 
     environment {
-        GIT_CREDENTIALS_ID = 'your-git-credentials-id' // Update with your Jenkins Git credentials ID
-        GIT_BRANCH = 'main' // Update with your Git branch
+        GIT_CREDENTIALS_ID = 'your-git-credentials-id' // Git credentials configured in Jenkins
+        GIT_BRANCH = 'main' // Branch to clone from
     }
 
     stages {
-        stage('Update HPA minReplicas') {
+        stage('Clone Git Repository') {
+            steps {
+                // Checkout the repository using the Jenkins SCM integration
+                checkout scm
+            }
+        }
+        stage('Update HPA File') {
             steps {
                 script {
-                    def hpaFile = params.HPA_FILE
+                    def hpaFile = "hpa.yaml"
                     def scalingLevel = params.SCALING_LEVEL
 
                     // Predefine minReplica values for each scaling level
@@ -58,7 +63,7 @@ pipeline {
                 }
             }
         }
-        stage('Commit Changes to Git') {
+        stage('Commit and Push Changes') {
             steps {
                 script {
                     // Configure Git user
@@ -69,7 +74,7 @@ pipeline {
 
                     // Add and commit the changes
                     sh """
-                    git add ${params.HPA_FILE}
+                    git add hpa.yaml
                     git commit -m "Updated HPA minReplicas for scaling level: ${params.SCALING_LEVEL}"
                     """
 
