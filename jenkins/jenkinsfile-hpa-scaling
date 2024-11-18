@@ -1,0 +1,86 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'HPA_FILE', defaultValue: 'hpa.yaml', description: 'Path to the HPA YAML file')
+        choice(name: 'SCALING_LEVEL', choices: ['low', 'medium', 'high'], description: 'Scaling level for all apps')
+    }
+
+    environment {
+        GIT_CREDENTIALS_ID = 'your-git-credentials-id' // Update with your Jenkins Git credentials ID
+        GIT_BRANCH = 'main' // Update with your Git branch
+    }
+
+    stages {
+        stage('Update HPA minReplicas') {
+            steps {
+                script {
+                    def hpaFile = params.HPA_FILE
+                    def scalingLevel = params.SCALING_LEVEL
+
+                    // Predefine minReplica values for each scaling level
+                    def scalingConfig = [
+                        low: [
+                            'app1-hpa': 2,
+                            'app2-hpa': 3,
+                            'app3-hpa': 4
+                        ],
+                        medium: [
+                            'app1-hpa': 5,
+                            'app2-hpa': 7,
+                            'app3-hpa': 10
+                        ],
+                        high: [
+                            'app1-hpa': 10,
+                            'app2-hpa': 15,
+                            'app3-hpa': 20
+                        ]
+                    ]
+
+                    // Get the configuration for the selected scaling level
+                    def selectedConfig = scalingConfig[scalingLevel]
+
+                    // Validate yq is installed
+                    sh 'yq --version'
+
+                    // Iterate over apps and update their minReplicas
+                    selectedConfig.each { appName, newMinReplicas ->
+                        echo "Updating HPA ${appName} to set minReplicas to ${newMinReplicas}"
+
+                        // Run yq command to update the YAML file
+                        sh """
+                        yq e '(select(.metadata.name == "${appName}") | .spec.minReplicas) = ${newMinReplicas}' -i ${hpaFile}
+                        """
+                    }
+
+                    // Optionally, print the updated file for verification
+                    sh "cat ${hpaFile}"
+                }
+            }
+        }
+        stage('Commit Changes to Git') {
+            steps {
+                script {
+                    // Configure Git user
+                    sh """
+                    git config user.name "Jenkins"
+                    git config user.email "jenkins@example.com"
+                    """
+
+                    // Add and commit the changes
+                    sh """
+                    git add ${params.HPA_FILE}
+                    git commit -m "Updated HPA minReplicas for scaling level: ${params.SCALING_LEVEL}"
+                    """
+
+                    // Push changes to the repository
+                    withCredentials([usernamePassword(credentialsId: env.GIT_CREDENTIALS_ID, usernameVariable: 'GIT_USER', passwordVariable: 'GIT_PASSWORD')]) {
+                        sh """
+                        git push https://${GIT_USER}:${GIT_PASSWORD}@$(git remote get-url origin | sed 's|https://||')
+                        """
+                    }
+                }
+            }
+        }
+    }
+}
