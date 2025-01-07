@@ -1,0 +1,94 @@
+import boto3
+import csv
+import io
+import os
+import datetime
+
+# Initialize AWS clients
+inspector2_client = boto3.client('inspector2')
+s3_client = boto3.client('s3')
+
+def fetch_inspector_findings():
+    findings = []
+    paginator = inspector2_client.get_paginator('list_findings')
+    response_iterator = paginator.paginate(
+        filterCriteria={
+            'resourceType': [{'comparison': 'EQUALS', 'value': 'ECR'}]
+        }
+    )
+    
+    for page in response_iterator:
+        findings.extend(page['findings'])
+    
+    return findings
+
+def generate_csv(findings):
+    # Define the CSV header based on available fields
+    headers = [
+        "FindingArn", "Severity", "Title", "Description", "ResourceType", 
+        "ResourceDetails", "FindingType", "CreatedAt", "UpdatedAt", "FirstObservedAt", 
+        "LastObservedAt", "InspectorScore", "CvssScore", "Remediation"
+    ]
+    
+    # Use an in-memory buffer to create the CSV
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=headers)
+    writer.writeheader()
+    
+    for finding in findings:
+        writer.writerow({
+            "FindingArn": finding.get("findingArn", ""),
+            "Severity": finding.get("severity", ""),
+            "Title": finding.get("title", ""),
+            "Description": finding.get("description", ""),
+            "ResourceType": finding.get("resourceType", ""),
+            "ResourceDetails": str(finding.get("resources", "")),  # Store as a string for now
+            "FindingType": finding.get("type", ""),
+            "CreatedAt": finding.get("createdAt", ""),
+            "UpdatedAt": finding.get("updatedAt", ""),
+            "FirstObservedAt": finding.get("firstObservedAt", ""),
+            "LastObservedAt": finding.get("lastObservedAt", ""),
+            "InspectorScore": finding.get("inspectorScore", ""),
+            "CvssScore": finding.get("cvss", {}).get("score", ""),
+            "Remediation": str(finding.get("remediation", ""))  # Store as a string for now
+        })
+    
+    output.seek(0)
+    return output.getvalue()
+
+def save_csv_to_s3(bucket_name, csv_data):
+    timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+    file_name = f'ecr_inspector_report_{timestamp}.csv'
+    
+    s3_client.put_object(
+        Bucket=bucket_name,
+        Key=file_name,
+        Body=csv_data,
+        ContentType='text/csv'
+    )
+    
+    return file_name
+
+def lambda_handler(event, context):
+    # Specify your S3 bucket
+    s3_bucket = os.getenv('S3_BUCKET_NAME', 'your-s3-bucket-name')
+    
+    # Fetch findings from Amazon Inspector
+    findings = fetch_inspector_findings()
+    
+    if not findings:
+        return {
+            "statusCode": 200,
+            "body": "No findings available for ECR."
+        }
+    
+    # Generate CSV from findings
+    csv_data = generate_csv(findings)
+    
+    # Save CSV to S3
+    report_file = save_csv_to_s3(s3_bucket, csv_data)
+    
+    return {
+        "statusCode": 200,
+        "body": f"Inspector findings CSV report saved to S3 as {report_file}."
+    }
