@@ -1,0 +1,88 @@
+import boto3
+import csv
+import json
+import os
+from io import StringIO
+
+# Initialize the ECR client and S3 client
+ecr_client = boto3.client('ecr')
+s3_client = boto3.client('s3')
+
+# S3 bucket name where the CSV file will be saved
+bucket_name = 'your-s3-bucket-name'
+csv_file_name = 'ecr_vulnerabilities.csv'
+
+def lambda_handler(event, context):
+    try:
+        # List all ECR repositories in the account
+        repositories_response = ecr_client.describe_repositories()
+        repositories = repositories_response['repositories']
+
+        # Prepare a list to store findings for all repositories
+        all_findings = []
+
+        # Loop through each repository
+        for repo in repositories:
+            repository_name = repo['repositoryName']
+            print(f"Checking repository: {repository_name}")
+            
+            # List all images (tags) in the repository
+            images_response = ecr_client.list_images(repositoryName=repository_name)
+            image_ids = images_response['imageIds']
+            
+            # Loop through each image tag in the repository
+            for image in image_ids:
+                image_tag = image.get('imageTag')
+                if image_tag:
+                    print(f"Checking image: {image_tag}")
+
+                    # Retrieve the image scan findings for the image
+                    scan_response = ecr_client.describe_image_scan_findings(
+                        repositoryName=repository_name,
+                        imageId={'imageTag': image_tag}
+                    )
+                    
+                    # Get findings
+                    findings = scan_response.get('imageScanFindings', {}).get('findingList', [])
+                    if findings:
+                        for finding in findings:
+                            all_findings.append({
+                                'repository_name': repository_name,
+                                'image_tag': image_tag,
+                                'severity': finding.get('severity', 'N/A'),
+                                'cve_id': finding.get('cvss', {}).get('v3', {}).get('cve', 'N/A'),
+                                'description': finding.get('description', 'N/A'),
+                                'package': finding.get('packageVulnerabilities', {}).get('packageName', 'N/A'),
+                                'version': finding.get('packageVulnerabilities', {}).get('packageVersion', 'N/A')
+                            })
+                    else:
+                        all_findings.append({
+                            'repository_name': repository_name,
+                            'image_tag': image_tag,
+                            'message': 'No vulnerabilities found.'
+                        })
+
+        # Prepare CSV data
+        csv_data = StringIO()
+        csv_writer = csv.DictWriter(csv_data, fieldnames=['repository_name', 'image_tag', 'severity', 'cve_id', 'description', 'package', 'version', 'message'])
+        csv_writer.writeheader()
+
+        # Write findings to CSV
+        for finding in all_findings:
+            csv_writer.writerow(finding)
+
+        # Upload the CSV file to S3
+        csv_data.seek(0)  # Move to the beginning of the StringIO buffer
+        s3_client.put_object(Bucket=bucket_name, Key=csv_file_name, Body=csv_data.getvalue())
+
+        return {
+            'statusCode': 200,
+            'body': json.dumps(f"CSV file successfully uploaded to S3: {csv_file_name}")
+        }
+
+    except Exception as e:
+        # Handle any exceptions that may occur
+        return {
+            'statusCode': 500,
+            'body': json.dumps(f"Error: {str(e)}")
+        }
